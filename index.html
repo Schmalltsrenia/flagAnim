@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body onload="main()">
+	<canvas id="webgl" width="600" height="1000"></canvas>
+</body>
+<script type="x-webgl/x-vertex-shader" id="vertexShader">
+	attribute vec2 aVertexPosition;
+	varying vec2 v_texCoord;
+	void main() {
+		v_texCoord = aVertexPosition;
+		gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+	}
+</script>
+<script type="x-webgl/x-fragment-shader" id="fragmentShader">
+	#ifdef GL_ES
+	precision mediump float;
+	#endif
+	#define PI 3.1415926535897932
+	uniform float time;
+	uniform sampler2D Texture0;
+	varying vec2 v_texCoord;
+
+	float random(in float x) {
+		return fract(sin(x) * 1e4);
+	}
+
+	float noise(in float x) {
+		float i = floor(x);
+		float f = fract(x);
+		float u = f * f * (3.0 - 2.0 * f);
+		return mix(random(i), random(i + 1.), u) * 2. - 1.;
+	}
+
+	void main()   
+	{
+		float offsetX = pow(v_texCoord.y - 1., 3.) * (sin((time * 1.2 + v_texCoord.y) * PI + v_texCoord.x) + noise(time)) * 0.04 * (v_texCoord.x + 0.8);
+		vec2 coord = v_texCoord;
+		coord.x = v_texCoord.x - offsetX - 0.3;
+		vec2 coordMap = (coord * 2. + vec2(0.1, 0)) * vec2(1., min(max(1. - offsetX, 0.99), 1.01));
+		if(coordMap.x <= 0. || coordMap.x > 1. || coordMap.y < 0. || coordMap.y > 1.) {
+			discard;
+		}
+		vec4 color = texture2D(Texture0, coordMap);
+		gl_FragColor = color;  
+	}
+</script>
+<script type="text/javascript">
+	var vertexShader = document.getElementById("vertexShader").text,
+		fragmentShader = document.getElementById("fragmentShader").text;
+</script>
+<script type="text/javascript" src="./lib/webgl-utils.js"></script>
+<script type="text/javascript" src="./lib/webgl-debug.js"></script>
+<script type="text/javascript" src="./lib/cuon-utils.js"></script>
+<script type="text/javascript" src="./lib/cuon-matrix.js"></script>
+<script type="text/javascript">
+	var image = new Image(),
+		texture;
+	function main() {
+		image.src = "flag.png";
+		image.onload = main1;
+	}
+	function main1() {
+		var drawing = document.getElementById("webgl"), gl;
+		if(drawing.getContext) {
+			try{
+				gl = drawing.getContext("experimental-webgl", {alpha: true});
+			} catch(ex) {
+				// do nothing
+			}
+			if(gl) {
+				// console.table([{no_error: gl.NO_ERROR, invalid_enum: gl.INVALID_ENUM, invalid_value: gl.INVALID_VALUE, invalid_operation: gl.INVALID_OPERATION, out_of_memory: gl.OUT_OF_MEMORY, context_lost_webgl: gl.CONTEXT_LOST_WEBGL}]);
+
+				// use webgl
+				gl.clearColor(1, 1, 1, 1);
+				gl.clear(gl.COLOR_BUFFER_BIT);
+				gl.viewport(0, 0, drawing.width, drawing.height);
+				var buffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0.5, 1]), gl.STATIC_DRAW);
+
+				var vertShader = gl.createShader(gl.VERTEX_SHADER);
+				var fragShader = gl.createShader(gl.FRAGMENT_SHADER);
+				var program = gl.createProgram();
+				var parameters = { time: +new Date() / 1000, resolution: [drawing.width, drawing.height] };
+				var flag = true;
+				function render() {
+
+					gl.shaderSource(vertShader, vertexShader);
+					gl.compileShader(vertShader);
+					gl.shaderSource(fragShader, fragmentShader);
+					gl.compileShader(fragShader);
+					if(flag) {
+						flag = false;
+						gl.attachShader(program, vertShader);
+						gl.attachShader(program, fragShader);
+					}
+					gl.linkProgram(program);
+					gl.useProgram(program);
+					var loc_time = gl.getUniformLocation(program, "time");
+					// console.log("uColor\n",uColor);
+					gl.uniform1f(loc_time, +new Date() / 1000 - parameters.time);
+					var _sampler = gl.getUniformLocation(program, "Texture0");
+					gl.uniform1i(_sampler, 0);
+					texture = gl.createTexture();
+					gl.activeTexture(gl.TEXTURE0);
+					gl.bindTexture(gl.TEXTURE_2D, texture);
+					gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+					gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+					var aVertexPosition = gl.getAttribLocation(program, "aVertexPosition");
+					// console.log("aVertexPosition", aVertexPosition);
+					gl.enableVertexAttribArray(aVertexPosition);
+					// if(!gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
+					// 	console.log("compile error\n", gl.getShaderInfoLog(vertShader));
+					// }
+					// if(!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)) {
+					// 	console.log("compile error\n", gl.getShaderInfoLog(fragShader));
+					// }
+					// if(!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+					// 	console.log("link error\n", gl.getProgramInfoLog(program));
+					// }
+					// var errorCode = gl.getError();
+					// while(errorCode) {
+					// 	console.log("Error occurred: " + errorCode);
+					// 	errorCode = gl.getError();
+					// }
+
+					var vertices = new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]),
+						buffer = gl.createBuffer(),
+						vertexSetSize = 2,
+						vertexSetCount = vertices.length / vertexSetSize;
+					gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+					gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+					gl.vertexAttribPointer(aVertexPosition, vertexSetSize, gl.FLOAT, false, 0, 0);
+					gl.drawArrays(gl.TRIANGLES, 0, vertexSetCount);
+					requestAnimationFrame(render);
+				}
+				render();
+
+			} else {
+				console.log("webgl not supported");
+			}
+		}
+	}
+</script>
+</html>
